@@ -33,7 +33,7 @@ fi
 # --- 2. Instalar CRDs de Gateway API (Prerrequisito Estándar) ---
 echo -e "${C_CIAN}--- 1. Instalando CRDs Estándar de Gateway API ---${C_RESET}"
 # Estos son los recursos base de K8s (Gateway, HTTPRoute, etc.) que Nginx necesita para funcionar.
-kubectl kustomize "https://github.com/kubernetes-sigs/gateway-api/config/crd/standard?ref=$GATEWAY_API_VERSION" | kubectl apply -f -
+kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v2.2.1" | kubectl apply -f -
 
 echo -e "${C_GRIS}Esperando a que los CRDs estén establecidos...${C_RESET}"
 kubectl wait --for=condition=Established crd/gateways.gateway.networking.k8s.io --timeout=60s
