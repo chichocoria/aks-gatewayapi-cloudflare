@@ -1,0 +1,39 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-principal
+  namespace: nginx-gateway
+  annotations:
+    # Usa el nombre de tu ClusterIssuer de producción.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  gatewayClassName: nginx
+  listeners:
+  # --- Listener HTTP (Puerto 80) con Redirección a HTTPS ---
+  - name: http
+    protocol: HTTP
+    port: 80
+    hostname: "*.chicho.com.ar" # Opcional: restringe a tu dominio
+    allowedRoutes:
+      namespaces:
+        from: All
+    # (Opcional) Descomenta esto si quieres forzar que todo tráfico interno use HTTPS
+    # tls:
+    #   mode: Terminate
+    #   certificateRefs:
+    #   - name: gateway-tls-cert
+
+  # --- Listener HTTPS (Puerto 443) ---
+  - name: https
+    protocol: HTTPS
+    port: 443
+    hostname: "*.chicho.com.ar" # Acepta tráfico para cualquier subdominio tuyo
+    allowedRoutes:
+      namespaces:
+        from: All
+    tls:
+      mode: Terminate
+      # Cert-Manager creará automáticamente este secreto con tu certificado real
+      certificateRefs:
+      - kind: Secret
+        name: gateway-tls-cert
