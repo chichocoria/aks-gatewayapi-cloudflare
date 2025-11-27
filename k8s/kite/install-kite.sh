@@ -13,6 +13,9 @@ C_GRIS='\e[0;37m'
 C_ROJO='\e[1;31m'
 C_AMARILLO='\e[1;33m'
 
+# --- VARIABLES ---
+KITE_NAMESPACE="kite-ns"
+
 echo -e "${C_AZUL}=============================================${C_RESET}"
 echo -e "${C_AZUL}       INSTALACIÓN DE KITE (HELM)${C_RESET}"
 echo -e "${C_AZUL}=============================================${C_RESET}"
@@ -26,13 +29,15 @@ echo -e "${C_GRIS}Actualizando repositorios...${C_RESET}"
 helm repo update
 
 # --- 2. Instalar Kite ---
-echo -e "${C_CIAN}--- Instalando Kite Chart ---${C_RESET}"
-# Usamos --wait para asegurar que los pods estén listos antes de seguir
+echo -e "${C_CIAN}--- Instalando Kite Chart en $KITE_NAMESPACE ---${C_RESET}"
+
+# Usamos la variable KITE_NAMESPACE , agregamos --create-namespace
 helm upgrade --install kite kite/kite \
-  --namespace kube-system \
+  --namespace $KITE_NAMESPACE \
+  --create-namespace \
   --wait
 
-echo -e "${C_VERDE}Kite instalado correctamente en namespace 'kube-system'.${C_RESET}"
+echo -e "${C_VERDE}Kite instalado correctamente en namespace '$KITE_NAMESPACE'.${C_RESET}"
 
 # --- 3. Aplicar HTTPRoute ---
 ROUTE_FILE="./kite/httproute.yaml"

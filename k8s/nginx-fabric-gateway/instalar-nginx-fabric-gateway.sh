@@ -13,80 +13,86 @@ C_AZUL='\e[1;34m'
 C_CIAN='\e[1;36m'
 C_GRIS='\e[0;37m'
 
-# --- Variables de Versión ---
+# --- Variables ---
 GATEWAY_API_VERSION="v1.5.1"
-NGINX_FABRIC_VERSION="v1.6.1"
 
-# --- Verificación de Dependencias ---
-echo -e "${C_AZUL}Verificando dependencias (kubectl)...${C_RESET}"
+echo -e "${C_AZUL}=============================================${C_RESET}"
+echo -e "${C_AZUL}   INSTALACIÓN DE NGINX GATEWAY FABRIC${C_RESET}"
+echo -e "${C_AZUL}=============================================${C_RESET}"
+
+# --- 1. Verificación de Dependencias ---
 if ! command -v kubectl &> /dev/null; then
-    echo -e "${C_ROJO}Error: kubectl no está instalado. Por favor, instala kubectl primero.${C_RESET}"
+    echo -e "${C_ROJO}Error: kubectl no está instalado.${C_RESET}"
     exit 1
 fi
-echo -e "${C_VERDE}Dependencias encontradas.${C_RESET}"
+if ! command -v helm &> /dev/null; then
+    echo -e "${C_ROJO}Error: helm no está instalado.${C_RESET}"
+    exit 1
+fi
 
-# --- Función para instalar NGINX Gateway Fabric ---
-install_nginx_gateway() {
-    echo -e "${C_CIAN}=========================================${C_RESET}"
-    echo -e "${C_CIAN}--- Iniciando instalación de NGINX Gateway Fabric ---${C_RESET}"
+# --- 2. Instalar CRDs de Gateway API (Prerrequisito Estándar) ---
+echo -e "${C_CIAN}--- 1. Instalando CRDs Estándar de Gateway API ---${C_RESET}"
+# Estos son los recursos base de K8s (Gateway, HTTPRoute, etc.) que Nginx necesita para funcionar.
+kubectl kustomize "https://github.com/kubernetes-sigs/gateway-api/config/crd/standard?ref=$GATEWAY_API_VERSION" | kubectl apply -f -
 
-    # Asegúrate de que este archivo exista, ya que es la definición de tu Gateway
-    local gateway_file="./nginx-fabric-gateway/gateway-principal.yaml"
+echo -e "${C_GRIS}Esperando a que los CRDs estén establecidos...${C_RESET}"
+kubectl wait --for=condition=Established crd/gateways.gateway.networking.k8s.io --timeout=60s
 
-    echo -e "${C_GRIS}[1/4] Instalando CRDs de Gateway API (ref: $GATEWAY_API_VERSION)...${C_RESET}"
-    kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=$GATEWAY_API_VERSION" | kubectl apply -f -
+# --- 3. Instalar NGINX Gateway Fabric con Helm (CAMBIO CLAVE) ---
+echo -e "${C_CIAN}--- 2. Desplegando NGINX Gateway Fabric (vía Helm) ---${C_RESET}"
 
-    echo -e "${C_GRIS}Esperando a que se establezcan los CRDs de Gateway API...${C_RESET}"
-    kubectl wait --for=condition=Established crd/gateways.gateway.networking.k8s.io --timeout=60s
-    kubectl wait --for=condition=Established crd/gatewayclasses.gateway.networking.k8s.io --timeout=60s
+# Usamos el Chart OCI oficial. 
+# --set service.type=LoadBalancer: Aquí definimos el tipo DE UNA VEZ, sin parches posteriores.
+helm upgrade --install nginx-gateway oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric \
+  --namespace nginx-gateway \
+  --create-namespace \
+  --set service.type=LoadBalancer \
+  --wait
 
-    echo -e "${C_GRIS}[2/4] Instalando NGINX Gateway Fabric (v$NGINX_FABRIC_VERSION)...${C_RESET}"
-    kubectl apply -f "https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/$NGINX_FABRIC_VERSION/deploy/crds.yaml"
+echo -e "${C_VERDE}Instalación de Helm completada.${C_RESET}"
+
+# --- 4. Obtener IP Externa ---
+echo -e "${C_CIAN}--- 3. Verificando Acceso Externo ---${C_RESET}"
+echo -e "${C_GRIS}Esperando asignación de IP Pública...${C_RESET}"
+
+external_ip=""
+while [ -z "$external_ip" ]; do
+    # Buscamos la IP en el servicio que creó Helm (el nombre suele ser el del release)
+    external_ip=$(kubectl get svc nginx-gateway -n nginx-gateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
     
-    # Instalamos la versión por defecto
-    kubectl apply -f "https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/$NGINX_FABRIC_VERSION/deploy/nodeport/deploy.yaml"
-
-    echo -e "${C_GRIS}Esperando a que el deployment 'nginx-gateway' esté listo...${C_RESET}"
-    kubectl wait --for=condition=Available deployment/nginx-gateway -n nginx-gateway --timeout=180s
-    
-    # --- NUEVO: Convertir a LoadBalancer ---
-    echo -e "${C_GRIS}[3/4] Configurando servicio como LoadBalancer...${C_RESET}"
-    kubectl patch service nginx-gateway -n nginx-gateway -p '{"spec": {"type": "LoadBalancer"}}'
-    
-    echo -e "${C_GRIS}Esperando asignación de IP Externa (esto puede tardar unos segundos)...${C_RESET}"
-    
-    external_ip=""
-    while [ -z "$external_ip" ]; do
-        # Intenta obtener la IP o Hostname
-        external_ip=$(kubectl get svc nginx-gateway -n nginx-gateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        
-        # Si no hay IP, intentamos buscar hostname por si acaso
-        if [ -z "$external_ip" ]; then
-            external_ip=$(kubectl get svc nginx-gateway -n nginx-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-        fi
-
-        if [ -z "$external_ip" ]; then
-            echo -n "."
-            sleep 3
-        fi
-    done
-    echo "" # Salto de línea estético
-
-    echo -e "${C_VERDE}Servicio 'nginx-gateway' configurado con IP: ${C_AZUL}${external_ip}${C_RESET}"
-
-    if [ ! -f "$gateway_file" ]; then
-        echo -e "${C_AMARILLO}[4/4] ADVERTENCIA: No se encontró '$gateway_file'.${C_RESET}"
-        echo -e "${C_AMARILLO}NGINX Gateway Fabric está instalado, pero el Gateway *principal* NO fue desplegado.${C_RESET}"
-    else
-        echo -e "${C_GRIS}[4/4] Aplicando Gateway principal desde $gateway_file...${C_RESET}"
-        kubectl apply -f "$gateway_file"
-        echo -e "${C_VERDE}Gateway principal aplicado.${C_RESET}"
+    if [ -z "$external_ip" ]; then
+        external_ip=$(kubectl get svc nginx-gateway -n nginx-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
     fi
 
-    echo -e "${C_CIAN}=========================================${C_RESET}"
-    echo -e "${C_VERDE}--- NGINX Gateway Fabric instalado exitosamente. ---${C_RESET}"
-    echo -e "Acceso externo disponible en: ${C_AZUL}${external_ip}${C_RESET}"
-}
+    if [ -z "$external_ip" ]; then
+        echo -n "."
+        sleep 3
+    fi
+done
+echo "" 
+echo -e "${C_VERDE}IP/Host asignado: ${C_AZUL}${external_ip}${C_RESET}"
 
-# --- Lógica Principal ---
-install_nginx_gateway
+# --- 5. Aplicar Configuraciones (Gateway y Redirección) ---
+echo -e "${C_CIAN}--- 4. Aplicando Configuración de Rutas ---${C_RESET}"
+
+GATEWAY_FILE="./nginx-fabric-gateway/gateway-principal.yaml"
+REDIRECT_FILE="./nginx-fabric-gateway/redirect.yaml" # (Archivo del Punto 3)
+
+if [ -f "$GATEWAY_FILE" ]; then
+    echo -e "${C_GRIS}Aplicando Gateway Principal...${C_RESET}"
+    kubectl apply -f "$GATEWAY_FILE"
+else
+    echo -e "${C_AMARILLO}Advertencia: No se encontró $GATEWAY_FILE${C_RESET}"
+fi
+
+if [ -f "$REDIRECT_FILE" ]; then
+    echo -e "${C_GRIS}Aplicando Redirección HTTP -> HTTPS...${C_RESET}"
+    kubectl apply -f "$REDIRECT_FILE"
+    echo -e "${C_VERDE}Redirección activada.${C_RESET}"
+else
+    echo -e "${C_AMARILLO}Nota: No se encontró $REDIRECT_FILE (Redirección inactiva)${C_RESET}"
+fi
+
+echo -e "${C_AZUL}=============================================${C_RESET}"
+echo -e "${C_VERDE}¡Despliegue finalizado exitosamente!${C_RESET}"
+echo -e "Tu Gateway está listo en: ${C_AZUL}${external_ip}${C_RESET}"

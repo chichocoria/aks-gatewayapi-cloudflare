@@ -17,19 +17,32 @@ echo -e "${C_AZUL}=============================================${C_RESET}"
 echo -e "${C_AZUL}   INSTALACIÓN DE CERT-MANAGER + CLOUDFLARE${C_RESET}"
 echo -e "${C_AZUL}=============================================${C_RESET}"
 
-# --- 1. Solicitud Segura del Token ---
+# --- 1. Solicitud de Datos (Token y Email) ---
+
+# 1.1 Token (Ya lo tenías)
 echo -e "${C_AMARILLO}Requerido: API Token de Cloudflare para los desafíos DNS-01.${C_RESET}"
 echo -n "Por favor, introduce tu Token y presiona [ENTER] (el texto estará oculto): "
-# -s oculta el input, -r evita que interprete barras invertidas
-read -s -r CF_API_TOKEN
-echo "" # Salto de línea después del input oculto
 
-# Validamos que no esté vacío
+read -s -r CF_API_TOKEN
+echo ""
+
 if [ -z "$CF_API_TOKEN" ]; then
     echo -e "${C_ROJO}Error: El token no puede estar vacío. Abortando.${C_RESET}"
     exit 1
 fi
-echo -e "${C_VERDE}Token recibido.${C_RESET}"
+
+# 1.2 NUEVO: Solicitud de Email
+echo -e "${C_AMARILLO}Requerido: Email para notificaciones de Let's Encrypt.${C_RESET}"
+echo -n "Por favor, introduce tu Email: "
+read LE_EMAIL
+
+# Validación simple de email (que no esté vacío)
+if [ -z "$LE_EMAIL" ]; then
+    echo -e "${C_ROJO}Error: El email es necesario para registrar los certificados.${C_RESET}"
+    exit 1
+fi
+echo -e "${C_VERDE}Datos recibidos.${C_RESET}"
+
 
 # --- 2. Preparación de Repositorios ---
 echo -e "${C_CIAN}--- Configurando Helm ---${C_RESET}"
@@ -66,7 +79,7 @@ kubectl create secret generic cloudflare-api-token-secret \
 
 echo -e "${C_VERDE}Secreto 'cloudflare-api-token-secret' configurado correctamente.${C_RESET}"
 
-# --- 5. Despliegue del Cluster Issuer ---
+# --- 5. Despliegue del Cluster Issuer (MODIFICADO) ---
 CLUSTER_ISSUER_FILE="./cert-manager/cluster-issuer.yaml"
 echo -e "${C_CIAN}--- Aplicando Cluster Issuer ---${C_RESET}"
 
@@ -75,8 +88,14 @@ if [ ! -f "$CLUSTER_ISSUER_FILE" ]; then
     exit 1
 fi
 
-kubectl apply -f "$CLUSTER_ISSUER_FILE"
-echo -e "${C_VERDE}Cluster Issuer aplicado.${C_RESET}"
+echo -e "${C_GRIS}Configurando Issuers con el email: $LE_EMAIL ...${C_RESET}"
+
+# LA MAGIA: Usamos sed para reemplazar el placeholder por el email real 
+# y se lo pasamos a kubectl mediante tubería (pipe).
+# No modificamos el archivo original en disco, solo lo que se envía al cluster.
+sed "s/EMAIL_PLACEHOLDER/$LE_EMAIL/g" "$CLUSTER_ISSUER_FILE" | kubectl apply -f -
+
+echo -e "${C_VERDE}Cluster Issuer aplicado correctamente.${C_RESET}"
 
 echo -e "${C_AZUL}=============================================${C_RESET}"
 echo -e "${C_VERDE}¡Instalación de Cert-Manager completada!${C_RESET}"
