@@ -33,38 +33,60 @@ install_nginx_gateway() {
     # Asegúrate de que este archivo exista, ya que es la definición de tu Gateway
     local gateway_file="./nginx-fabric-gateway/gateway-principal.yaml"
 
-    echo -e "${C_GRIS}[1/3] Instalando CRDs de Gateway API (ref: $GATEWAY_API_VERSION)...${C_RESET}"
+    echo -e "${C_GRIS}[1/4] Instalando CRDs de Gateway API (ref: $GATEWAY_API_VERSION)...${C_RESET}"
     kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=$GATEWAY_API_VERSION" | kubectl apply -f -
 
     echo -e "${C_GRIS}Esperando a que se establezcan los CRDs de Gateway API...${C_RESET}"
     kubectl wait --for=condition=Established crd/gateways.gateway.networking.k8s.io --timeout=60s
     kubectl wait --for=condition=Established crd/gatewayclasses.gateway.networking.k8s.io --timeout=60s
 
-    echo -e "${C_GRIS}[2/3] Instalando NGINX Gateway Fabric (v$NGINX_FABRIC_VERSION)...${C_RESET}"
+    echo -e "${C_GRIS}[2/4] Instalando NGINX Gateway Fabric (v$NGINX_FABRIC_VERSION)...${C_RESET}"
     kubectl apply -f "https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/$NGINX_FABRIC_VERSION/deploy/crds.yaml"
-    # Usamos 'deploy.yaml' de la carpeta 'nodeport' o 'clusterip'. Para este caso, cualquiera funciona.
+    
+    # Instalamos la versión por defecto
     kubectl apply -f "https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/$NGINX_FABRIC_VERSION/deploy/nodeport/deploy.yaml"
 
     echo -e "${C_GRIS}Esperando a que el deployment 'nginx-gateway' esté listo...${C_RESET}"
     kubectl wait --for=condition=Available deployment/nginx-gateway -n nginx-gateway --timeout=180s
-    echo -e "${C_GRIS}Pods de NGINX Gateway listos:${C_RESET}"
-    kubectl get pods -n nginx-gateway
-    echo -e "${C_VERDE}Servicio 'nginx-gateway' creado como ClusterIP.${C_RESET}"
+    
+    # --- NUEVO: Convertir a LoadBalancer ---
+    echo -e "${C_GRIS}[3/4] Configurando servicio como LoadBalancer...${C_RESET}"
+    kubectl patch service nginx-gateway -n nginx-gateway -p '{"spec": {"type": "LoadBalancer"}}'
+    
+    echo -e "${C_GRIS}Esperando asignación de IP Externa (esto puede tardar unos segundos)...${C_RESET}"
+    
+    external_ip=""
+    while [ -z "$external_ip" ]; do
+        # Intenta obtener la IP o Hostname
+        external_ip=$(kubectl get svc nginx-gateway -n nginx-gateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        
+        # Si no hay IP, intentamos buscar hostname por si acaso
+        if [ -z "$external_ip" ]; then
+            external_ip=$(kubectl get svc nginx-gateway -n nginx-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        fi
+
+        if [ -z "$external_ip" ]; then
+            echo -n "."
+            sleep 3
+        fi
+    done
+    echo "" # Salto de línea estético
+
+    echo -e "${C_VERDE}Servicio 'nginx-gateway' configurado con IP: ${C_AZUL}${external_ip}${C_RESET}"
 
     if [ ! -f "$gateway_file" ]; then
-        echo -e "${C_AMARILLO}[3/3] ADVERTENCIA: No se encontró '$gateway_file'.${C_RESET}"
+        echo -e "${C_AMARILLO}[4/4] ADVERTENCIA: No se encontró '$gateway_file'.${C_RESET}"
         echo -e "${C_AMARILLO}NGINX Gateway Fabric está instalado, pero el Gateway *principal* NO fue desplegado.${C_RESET}"
     else
-        echo -e "${C_GRIS}[3/3] Aplicando Gateway principal desde $gateway_file...${C_RESET}"
+        echo -e "${C_GRIS}[4/4] Aplicando Gateway principal desde $gateway_file...${C_RESET}"
         kubectl apply -f "$gateway_file"
         echo -e "${C_VERDE}Gateway principal aplicado.${C_RESET}"
     fi
 
-    echo -e "${C_VERDE}--- NGINX Gateway Fabric instalado. ---${C_RESET}"
+    echo -e "${C_CIAN}=========================================${C_RESET}"
+    echo -e "${C_VERDE}--- NGINX Gateway Fabric instalado exitosamente. ---${C_RESET}"
+    echo -e "Acceso externo disponible en: ${C_AZUL}${external_ip}${C_RESET}"
 }
 
 # --- Lógica Principal ---
 install_nginx_gateway
-
-echo -e "${C_CIAN}=========================================${C_RESET}"
-echo -e "${C_VERDE}¡Instalación completada!${C_RESET}"
