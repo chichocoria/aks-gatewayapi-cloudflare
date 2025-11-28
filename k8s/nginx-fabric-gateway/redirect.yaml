@@ -8,7 +8,7 @@ spec:
   parentRefs:
   - name: gateway-principal
     namespace: nginx-gateway
-    sectionName: http # Se vincula explícitamente al listener HTTP del puerto 80
+    sectionName: http # Listener HTTP del puerto 80
   
   hostnames:
   - "*.chicho.com.ar" # Debe coincidir con lo que definiste en el Gateway

@@ -31,7 +31,7 @@ helm repo update
 # --- 2. Instalar Kite ---
 echo -e "${C_CIAN}--- Instalando Kite Chart en $KITE_NAMESPACE ---${C_RESET}"
 
-# Usamos la variable KITE_NAMESPACE , agregamos --create-namespace
+# Instalacion del Chart
 helm upgrade --install kite kite/kite \
   --namespace $KITE_NAMESPACE \
   --create-namespace \
@@ -44,7 +44,7 @@ ROUTE_FILE="./kite/httproute.yaml"
 
 echo -e "${C_CIAN}--- Exponiendo Kite con Gateway API ---${C_RESET}"
 
-# Verificamos si el script se está ejecutando desde dentro de la carpeta 'kite' o desde fuera
+#Ajuste de path relativo por si se ejecuta desde raíz o subcarpeta
 if [ -f "httproute.yaml" ]; then
     ROUTE_FILE="httproute.yaml"
 elif [ ! -f "$ROUTE_FILE" ]; then

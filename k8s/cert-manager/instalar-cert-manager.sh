@@ -79,7 +79,7 @@ kubectl create secret generic cloudflare-api-token-secret \
 
 echo -e "${C_VERDE}Secreto 'cloudflare-api-token-secret' configurado correctamente.${C_RESET}"
 
-# --- 5. Despliegue del Cluster Issuer (MODIFICADO) ---
+# --- 5. Despliegue del Cluster Issuer ---
 CLUSTER_ISSUER_FILE="./cert-manager/cluster-issuer.yaml"
 echo -e "${C_CIAN}--- Aplicando Cluster Issuer ---${C_RESET}"
 
