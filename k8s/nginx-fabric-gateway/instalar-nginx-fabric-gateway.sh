@@ -31,11 +31,11 @@ if ! command -v helm &> /dev/null; then
     exit 1
 fi
 
-# --- 2. Instalar CRDs de Gateway API (FIX) ---
+# --- 2. Instalar CRDs de Gateway API ---
 echo -e "${C_CIAN}--- 1. Instalando CRDs Estándar de Gateway API ---${C_RESET}"
 echo -e "${C_GRIS}Descargando y aplicando CRDs oficiales (Raw YAML)...${C_RESET}"
 
-# FIX: Usamos 'apply -f' directo al archivo de release. Esto evita el error de kustomize.
+# Usamos YAML directo para evitar problemas de path con kustomize remoto
 kubectl apply -f "$GATEWAY_API_URL"
 
 echo -e "${C_GRIS}Esperando a que los CRDs estén establecidos...${C_RESET}"
@@ -45,9 +45,7 @@ echo -e "${C_VERDE}CRDs instalados correctamente.${C_RESET}"
 # --- 3. Instalar NGINX Gateway Fabric con Helm (OCI) ---
 echo -e "${C_CIAN}--- 2. Desplegando Control Plane (Helm OCI) ---${C_RESET}"
 
-# Usamos el registro OCI oficial como indica la documentación.
-# NOTA: No forzamos LoadBalancer aquí. NGINX Gateway Fabric crea el servicio
-# dinámicamente cuando detecta un recurso 'Gateway' válido.
+# Instalamos via OCI. El LoadBalancer se creará dinámicamente al aplicar un Gateway válido.
 helm upgrade --install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
   --namespace nginx-gateway \
   --create-namespace \
@@ -71,7 +69,7 @@ else
     exit 1
 fi
 
-# --- 5. Obtener IP Externa (Lógica reordenada) ---
+# --- 5. Esperar asignación de IP Pública ---
 echo -e "${C_CIAN}--- 4. Esperando IP Pública ---${C_RESET}"
 echo -e "${C_GRIS}Buscando servicios LoadBalancer en el namespace nginx-gateway...${C_RESET}"
 
@@ -81,7 +79,7 @@ for i in {1..24}; do
     # Buscamos CUALQUIER servicio de tipo LoadBalancer en el namespace
     external_ip=$(kubectl get svc -n nginx-gateway --field-selector spec.type=LoadBalancer -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}' 2>/dev/null)
     
-    # Si no es IP, probamos hostname (común en AWS)
+    # Si no es IP, probamos hostname
     if [ -z "$external_ip" ]; then
         external_ip=$(kubectl get svc -n nginx-gateway --field-selector spec.type=LoadBalancer -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
     fi
@@ -102,7 +100,7 @@ else
     echo -e "${C_VERDE}¡IP/Host asignado!: ${C_AZUL}${external_ip}${C_RESET}"
 fi
 
-# --- 6. Aplicar Redirección (Opcional) ---
+# --- 6. Aplicar Redirección ---
 if [ -f "$REDIRECT_FILE" ]; then
     echo -e "${C_CIAN}--- 5. Configurando Redirección HTTP -> HTTPS ---${C_RESET}"
     kubectl apply -f "$REDIRECT_FILE"
