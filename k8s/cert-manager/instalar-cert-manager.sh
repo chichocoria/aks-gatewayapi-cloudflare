@@ -36,7 +36,7 @@ echo -e "${C_AMARILLO}Requerido: Email para notificaciones de Let's Encrypt.${C_
 echo -n "Por favor, introduce tu Email: "
 read LE_EMAIL
 
-# Cerifica que el mail no este vacio
+# Verifica que el mail no este vacio
 if [ -z "$LE_EMAIL" ]; then
     echo -e "${C_ROJO}Error: El email es necesario para registrar los certificados.${C_RESET}"
     exit 1
@@ -90,7 +90,7 @@ fi
 
 echo -e "${C_GRIS}Configurando Issuers con el email: $LE_EMAIL ...${C_RESET}"
 
-#Cargamos el mail en el archivo antes de aplicarlo
+# Cargamos el mail en el archivo antes de aplicarlo
 # No modificamos el archivo original en disco, solo lo que se envía al cluster.
 sed "s/EMAIL_PLACEHOLDER/$LE_EMAIL/g" "$CLUSTER_ISSUER_FILE" | kubectl apply -f -
 

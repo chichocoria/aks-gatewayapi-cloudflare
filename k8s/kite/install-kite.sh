@@ -44,7 +44,7 @@ ROUTE_FILE="./kite/httproute.yaml"
 
 echo -e "${C_CIAN}--- Exponiendo Kite con Gateway API ---${C_RESET}"
 
-#Ajuste de path relativo por si se ejecuta desde raíz o subcarpeta
+# Ajuste de path relativo por si se ejecuta desde raíz o subcarpeta
 if [ -f "httproute.yaml" ]; then
     ROUTE_FILE="httproute.yaml"
 elif [ ! -f "$ROUTE_FILE" ]; then
