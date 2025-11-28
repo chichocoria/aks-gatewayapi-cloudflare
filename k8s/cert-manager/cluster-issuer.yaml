@@ -17,7 +17,7 @@ spec:
             key: api-token
 
 ---
-# --- ISSUER DE PRODUCCIÓN (REAL) ---
+# --- ISSUER DE PRODUCCIÓN (Produccion) ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:

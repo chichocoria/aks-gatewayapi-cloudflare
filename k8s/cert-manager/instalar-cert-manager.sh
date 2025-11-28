@@ -19,7 +19,7 @@ echo -e "${C_AZUL}=============================================${C_RESET}"
 
 # --- 1. Solicitud de Datos (Token y Email) ---
 
-# 1.1 Token (Ya lo tenías)
+# 1.1 Token
 echo -e "${C_AMARILLO}Requerido: API Token de Cloudflare para los desafíos DNS-01.${C_RESET}"
 echo -n "Por favor, introduce tu Token y presiona [ENTER] (el texto estará oculto): "
 
@@ -31,12 +31,12 @@ if [ -z "$CF_API_TOKEN" ]; then
     exit 1
 fi
 
-# 1.2 NUEVO: Solicitud de Email
+# 1.2 Solicitud de Email
 echo -e "${C_AMARILLO}Requerido: Email para notificaciones de Let's Encrypt.${C_RESET}"
 echo -n "Por favor, introduce tu Email: "
 read LE_EMAIL
 
-# Validación simple de email (que no esté vacío)
+# Cerifica que el mail no este vacio
 if [ -z "$LE_EMAIL" ]; then
     echo -e "${C_ROJO}Error: El email es necesario para registrar los certificados.${C_RESET}"
     exit 1
@@ -66,9 +66,9 @@ helm upgrade --install cert-manager jetstack/cert-manager \
 
 echo -e "${C_VERDE}Cert-Manager instalado y ejecutándose.${C_RESET}"
 
-# --- 4. Creación del Secreto de Cloudflare (En Memoria) ---
+# --- 4. Configurar Secreto Cloudflare ---
+## Generamos el secreto en memoria y lo aplicamos directo (sin tocar disco)
 echo -e "${C_CIAN}--- Configurando Secreto de Cloudflare ---${C_RESET}"
-# Aquí está la magia de seguridad:
 # 1. Generamos el secreto localmente con --dry-run=client (no lo manda al cluster aún).
 # 2. Lo pasamos por tubería (|) directamente a 'kubectl apply'.
 # El token NUNCA toca el disco en un archivo .yaml.
@@ -90,8 +90,7 @@ fi
 
 echo -e "${C_GRIS}Configurando Issuers con el email: $LE_EMAIL ...${C_RESET}"
 
-# LA MAGIA: Usamos sed para reemplazar el placeholder por el email real 
-# y se lo pasamos a kubectl mediante tubería (pipe).
+#Cargamos el mail en el archivo antes de aplicarlo
 # No modificamos el archivo original en disco, solo lo que se envía al cluster.
 sed "s/EMAIL_PLACEHOLDER/$LE_EMAIL/g" "$CLUSTER_ISSUER_FILE" | kubectl apply -f -
 
